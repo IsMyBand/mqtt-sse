@@ -3,8 +3,9 @@ var mqtt = require('mqtt');
 var router = express.Router();
 var url = require('url');
 
-var mqtt_url = process.env.CLOUDMQTT_URL || 'mqtt://localhost:1883';
-var topic = process.env.CLOUDMQTT_TOPIC || 'test';
+var mqtt_url = process.env.CLOUDMQTT_URL || 'ws://broker.hivemq.com:8000/mqtt';
+var _HOST_ID = process.env.CLOUDMQTT_TOPIC || 'HAB0001';
+var topic = _HOST_ID + "/#" ;
 var client = mqtt.connect(mqtt_url);
 
 /* GET home page. */
@@ -17,15 +18,38 @@ router.get('/', function(req, res, next) {
   });
 });
 
-client.on('connect', function() {
+var Things = require("../devices/Things");
+var things = new Things(_HOST_ID, client);
+
+client.on('connect', function() {  
+  
+  console.log("A side connected!");
+
+  var Thing = require("../devices/Thing");
+  var device1 = new Thing("DEVICE001");
+  things.registerThing(device1);
+
+  console.log(device1);
+
   router.post('/publish', function(req, res) {
-	var msg = JSON.stringify({
-	  date: new Date().toString(),
-	  msg: req.body.msg
-	});
+    var msg = JSON.stringify({
+      date: new Date().toString(),
+      msg: req.body.msg
+    });
     client.publish(topic, msg, function() {
       res.writeHead(204, { 'Connection': 'keep-alive' });
       res.end();
+    });
+  });
+
+  client.subscribe(topic, function() {
+    console.log("Suscribed to " + topic);
+    client.on('message', function(topic, msg, pkt) {
+      //res.write("New message\n");
+      console.log("Got " + topic + " --: " + msg );
+      things.execute(topic, msg);
+      //var json = JSON.parse(msg);
+      //res.write("data: " + json.date + ": " + json.msg + "\n\n");
     });
   });
 
@@ -45,10 +69,12 @@ client.on('connect', function() {
     }, 20000);
 
     client.subscribe(topic, function() {
+      console.log("Suscribed to " + topic);
       client.on('message', function(topic, msg, pkt) {
-		//res.write("New message\n");
-		var json = JSON.parse(msg);
-        res.write("data: " + json.date + ": " + json.msg + "\n\n");
+        //res.write("New message\n");
+       //console.log("Got " + topic + " --: " + msg + " [" + JSON.stringify(pkt) + "]" );
+       var json = {date: Date.now(), msg: msg};
+       res.write("data: " + json.date + ": " + json.msg + "\n\n");
       });
     });
   });
